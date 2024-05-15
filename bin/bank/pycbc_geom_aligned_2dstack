@@ -31,6 +31,7 @@ import copy
 import numpy
 import logging
 import h5py
+
 import pycbc.tmpltbank
 import pycbc.version
 from pycbc import pnutils
@@ -47,10 +48,9 @@ usage = """usage: %prog [options]"""
 _desc = __doc__[1:]
 parser = argparse.ArgumentParser(usage, description=_desc,
            formatter_class=pycbc.tmpltbank.IndentedHelpFormatterWithNL)
+pycbc.add_common_pycbc_options(parser)
 # Code specific options
 parser.add_argument('--version', action='version', version=__version__)
-parser.add_argument("--verbose", action="store_true", default=False,\
-                    help="verbose output")
 parser.add_argument("--pn-order", action="store", type=str,\
                   default=None,\
                   help="Determines the PN order to use. Note that if you "+\
@@ -106,11 +106,7 @@ opts = parser.parse_args()
 opts.eval_vec4_depth = not opts.skip_vec4_depth
 opts.eval_vec5_depth = not opts.skip_vec5_depth
 
-if opts.verbose:
-    log_level = logging.DEBUG
-else:
-    log_level = logging.WARN
-logging.basicConfig(format='%(asctime)s %(message)s', level=log_level)
+pycbc.init_logging(opts.verbose)
 
 # Sanity check options
 if not opts.pn_order:
@@ -256,7 +252,9 @@ for entry in temp_bank:
         # Double check that no points appear outside what was calculated above
         if len(xis_close):
             if vec3_min > xis_close[:,2].min():
-                logging.warn("WARNING: Numerical placement fails, trying again")
+                logging.warning(
+                    "WARNING: Numerical placement fails, trying again"
+                )
                 temp_idx = xis_close[:,2].argmin()
                 temmpBestMasses = masses_close[temp_idx]
                 temmpBestXis = xis_close[temp_idx]
@@ -273,7 +271,9 @@ for entry in temp_bank:
                     vec3_max = temmpvec3_max
                     vec3_depth = vec3_max - vec3_min
             if vec3_max < xis_close[:,2].max():
-                logging.warn("WARNING: Numerical placement fails, trying again")
+                logging.warning(
+                    "WARNING: Numerical placement fails, trying again"
+                )
                 temp_idx = xis_close[:,2].argmax()
                 temmpBestMasses = physMasses[temp_idx]
                 temmpBestXis = xis[temp_idx]

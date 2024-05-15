@@ -26,9 +26,13 @@ This module is supplied to make a convenience function for converting into
 specific values from PyCBC template banks.
 """
 
+import logging
 import numpy as np
+
 from pycbc import conversions as conv
 from pycbc import pnutils
+
+logger = logging.getLogger('pycbc.tmpltbank.bank_conversions')
 
 # Convert from parameter name to helper function
 # some multiple names are used for the same function
@@ -90,7 +94,7 @@ def get_bank_property(parameter, bank, template_ids):
         if parameter != "premerger_duration" and 'template_duration' in bank:
             # This statement should be the reached only if 'duration'
             # is given, but 'template_duration' is in the bank
-            values = bank['template_duration'][:][template_ids]
+            fullband_dur = bank['template_duration'][:][template_ids]
         elif parameter in ['template_duration', 'duration']:
             # Only calculate fullband/premerger durations if we need to
             fullband_req = True

@@ -32,10 +32,13 @@ https://ldas-jobs.ligo.caltech.edu/~cbc/docs/pycbc/NOTYETCREATED.html
 import logging
 import os.path
 import configparser as ConfigParser
+
 from pycbc.workflow.core import FileList, make_analysis_dir, Node
 from pycbc.workflow.core import Executable, resolve_url_to_file
 from pycbc.workflow.jobsetup import (LalappsInspinjExecutable,
         PycbcCreateInjectionsExecutable, select_generic_executable)
+
+logger = logging.getLogger('pycbc.workflow.injection')
 
 def veto_injections(workflow, inj_file, veto_file, veto_name, out_dir, tags=None):
     tags = [] if tags is None else tags
@@ -90,7 +93,7 @@ def compute_inj_optimal_snr(workflow, inj_file, precalc_psd_files, out_dir,
                                               'parallelization-factor',
                                               tags))
     except Exception as e:
-        logging.warning(e)
+        logger.warning(e)
         factor = 1
 
     if factor == 1:
@@ -196,7 +199,7 @@ def setup_injection_workflow(workflow, output_dir=None,
     """
     if tags is None:
         tags = []
-    logging.info("Entering injection module.")
+    logger.info("Entering injection module.")
     make_analysis_dir(output_dir)
 
     # Get full analysis segment for output file naming
@@ -222,10 +225,12 @@ def setup_injection_workflow(workflow, output_dir=None,
                           out_dir=output_dir, ifos='HL',
                           tags=curr_tags)
             if exe is PycbcCreateInjectionsExecutable:
-                config_url = workflow.cp.get('workflow-injections',
-                                             section+'-config-file')
-                config_file = resolve_url_to_file(config_url)
-                node, inj_file = inj_job.create_node(config_file)
+                config_urls = workflow.cp.get('workflow-injections',
+                                              section+'-config-files')
+                config_urls = config_urls.split(',')
+                config_files = FileList([resolve_url_to_file(cf.strip())
+                                         for cf in config_urls])
+                node, inj_file = inj_job.create_node(config_files)
             else:
                 node = inj_job.create_node(full_segment)
             if injection_method == "AT_RUNTIME":
@@ -254,5 +259,5 @@ def setup_injection_workflow(workflow, output_dir=None,
 
         inj_tags.append(inj_tag)
 
-    logging.info("Leaving injection module.")
+    logger.info("Leaving injection module.")
     return inj_files, inj_tags

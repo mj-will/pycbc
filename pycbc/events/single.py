@@ -8,6 +8,8 @@ from pycbc.types import MultiDetOptionAction
 from pycbc import conversions as conv
 from pycbc import bin_utils
 
+logger = logging.getLogger('pycbc.events.single')
+
 
 class LiveSingle(object):
     def __init__(self, ifo,
@@ -198,7 +200,7 @@ class LiveSingle(object):
         return candidate
 
     def calculate_ifar(self, sngl_ranking, duration):
-        logging.info("Calculating IFAR")
+        logger.info("Calculating IFAR")
         if self.fixed_ifar and self.ifo in self.fixed_ifar:
             return self.fixed_ifar[self.ifo]
 
@@ -211,7 +213,7 @@ class LiveSingle(object):
                 rates = dist_grp['counts'][:] / live_time
                 coeffs = dist_grp['fit_coeff'][:]
         except FileNotFoundError:
-            logging.error(
+            logger.error(
                 'Single fit file %s not found; '
                 'dropping a potential single-detector candidate!',
                 self.fit_file
@@ -223,8 +225,17 @@ class LiveSingle(object):
 
         rate = rates[dur_bin]
         coeff = coeffs[dur_bin]
+        if np.isnan(coeff) or np.isnan(rate):
+            logger.warning(
+                "Single trigger fits are not valid - singles "
+                "cannot be assessed for this detector at this time."
+            )
+            return None
+
         rate_louder = rate * fits.cum_fit('exponential', [sngl_ranking],
                                           coeff, thresh)[0]
+
         # apply a trials factor of the number of duration bins
         rate_louder *= len(rates)
+
         return conv.sec_to_year(1. / rate_louder)

@@ -66,7 +66,28 @@ class LogFormatter(logging.Formatter):
         return s
 
 
-def init_logging(verbose=False, format='%(asctime)s %(message)s'):
+def add_common_pycbc_options(parser):
+    """
+    Common utility to add standard options to each PyCBC executable.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        The argument parser to which the options will be added
+    """
+    group = parser.add_argument_group(
+        title="PyCBC common options",
+        description="Common options for PyCBC executables.",
+    )
+    group.add_argument('-v', '--verbose', action='count', default=0,
+                       help='Add verbosity to logging. Adding the option '
+                            'multiple times makes logging progressively '
+                            'more verbose, e.g. --verbose or -v provides '
+                            'logging at the info level, but -vv or '
+                            '--verbose --verbose provides debug logging.')
+
+def init_logging(verbose=False,
+                 format='%(asctime)s %(levelname)s : %(message)s'):
     """Common utility for setting up logging in PyCBC.
 
     Installs a signal handler such that verbosity can be activated at
@@ -89,8 +110,8 @@ def init_logging(verbose=False, format='%(asctime)s %(message)s'):
             log_level = logging.WARN
         else:
             log_level = logging.DEBUG
-        logging.warn('Got signal %d, setting log level to %d',
-                     signum, log_level)
+        logging.warning('Got signal %d, setting log level to %d',
+                        signum, log_level)
         logger.setLevel(log_level)
 
     signal.signal(signal.SIGUSR1, sig_handler)

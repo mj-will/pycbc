@@ -36,7 +36,8 @@ from .brute_marg import BruteLISASkyModesMarginalize
 from .gated_gaussian_noise import (GatedGaussianNoise, GatedGaussianMargPol)
 from .single_template import SingleTemplate
 from .relbin import Relative, RelativeTime, RelativeTimeDom
-from .hierarchical import HierarchicalModel, MultiSignalModel
+from .hierarchical import (HierarchicalModel, MultiSignalModel,
+                           JointPrimaryMarginalizedModel)
 from .lisa_ew import LISAEarlyWarningModel
 
 
@@ -209,6 +210,7 @@ _models = {_cls.name: _cls for _cls in (
     MultiSignalModel,
     RelativeTimeDom,
     LISAEarlyWarningModel,
+    JointPrimaryMarginalizedModel,
 )}
 
 

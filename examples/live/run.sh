@@ -131,7 +131,7 @@ python -m mpi4py `which pycbc_live` \
 --sample-rate 2048 \
 --enable-bank-start-frequency \
 --low-frequency-cutoff ${f_min} \
---max-length 256 \
+--max-length 512 \
 --approximant "SPAtmplt:mtotal<4" "SEOBNRv4_ROM:else" \
 --chisq-bins "0.72*get_freq('fSEOBNRv4Peak',params.mass1,params.mass2,params.spin1z,params.spin2z)**0.7" \
 --snr-abort-threshold 500 \
@@ -195,10 +195,11 @@ python -m mpi4py `which pycbc_live` \
 --src-class-eff-to-lum-distance 0.74899 \
 --src-class-lum-distance-to-delta -0.51557 -0.32195 \
 --run-snr-optimization \
---snr-opt-di-maxiter 50 \
---snr-opt-di-popsize 100 \
---snr-opt-include-candidate \
---snr-opt-seed 42 \
+--snr-opt-extra-opts \
+    "--snr-opt-method differential_evolution \
+    --snr-opt-di-maxiter 50 \
+    --snr-opt-di-popsize 100 \
+    --snr-opt-include-candidate " \
 --sngl-ifar-est-dist conservative \
 --single-newsnr-threshold 9 \
 --single-duration-threshold 7 \
@@ -210,11 +211,14 @@ python -m mpi4py `which pycbc_live` \
 # If you would like to use the pso optimizer, change --optimizer to pso
 #  and include these arguments while removing other optimizer args.
 #  You will need to install the pyswarms package into your environment.
-# --snr-opt-pso-iters 5 \
-# --snr-opt-pso-particles 250 \
-# --snr-opt-pso-c1 0.5 \
-# --snr-opt-pso-c2 2.0 \
-# --snr-opt-pso-w 0.01 \
+# --snr-opt-extra-opts \
+#   "--snr-opt-method pso \
+#   --snr-opt-pso-iters 5 \
+#   --snr-opt-pso-particles 250 \
+#   --snr-opt-pso-c1 0.5 \
+#   --snr-opt-pso-c2 2.0 \
+#   --snr-opt-pso-w 0.01 \
+#   --snr-opt-include-candidate " \
 
 # note that, at this point, some SNR optimization processes may still be
 # running, so the checks below may ignore their results

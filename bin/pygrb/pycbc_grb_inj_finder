@@ -41,7 +41,7 @@ from ligo.segments.utils import fromsegwizard
 
 from pycbc import __version__
 from pycbc.inject import InjectionSet
-from pycbc.io import FieldArray
+from pycbc.results.pygrb_postprocessing_utils import template_hash_to_id
 
 __author__ = "Duncan Macleod <duncan.macleod@ligo.org>"
 
@@ -91,11 +91,17 @@ def read_hdf5_triggers(inputfiles, verbose=False):
     datasets = {}
 
     def _scan_dataset(name, obj):
-        if not isinstance(obj, h5py.Dataset) or "search" in name:
+        if not isinstance(obj, h5py.Dataset):
             return
         elif name.startswith("network") and \
             NETWORK_IFO_EVENT_ID_REGEX.match(name):
                 return
+        elif "template_id" in name:
+            return
+        elif "search" in name:
+            return
+        elif "gating" in name:
+            return
         else:
             shape = obj.shape
             dtype = obj.dtype
@@ -126,7 +132,7 @@ def read_hdf5_triggers(inputfiles, verbose=False):
     # copy dataset contents
     for filename in inputfiles:
         with h5py.File(filename, 'r') as h5in:
-            # Skipping emtpy files
+            # Skipping empty files
             if len(h5in['network']['end_time_gc'][:]):
                 for dset in datasets:
                     data = h5in[dset][:]
@@ -173,6 +179,11 @@ parser.add_argument(
     "--inj-files",
     nargs="+",
     help="path(s) to input injection file(s)",
+)
+parser.add_argument(
+    "--bank-file",
+    required=True,
+    help="full template bank file for mapping hashes to ids",
 )
 parser.add_argument(
     "-o",
@@ -282,10 +293,17 @@ with tqdm.tqdm(args.inj_files, desc="Finding injections",
                 missed.append(i)
             else:
                 found.append(i)
-                eid = l if r - l == 1 else event_id[l + snr[l:r].argmax()]
+                # the needed event_id is unique within its split_inj file
+                eid = event_id[l] if r - l == 1 \
+                    else event_id[l + snr[l:r].argmax()]
                 for x in triggers:
                     ij = x.split('/')
-                    out_trigs[ij[0]][ij[1]].append(triggers[x][eid])
+                    # assign a new, overall unique event_id to a found
+                    # injection by simply counting found injections
+                    if ij[1] == 'event_id':
+                        out_trigs[ij[0]][ij[1]].append(len(found)-1)
+                    else:
+                        out_trigs[ij[0]][ij[1]].append(triggers[x][eid])
 
         # record all injections
         if allinjections is None:
@@ -329,12 +347,21 @@ with h5py.File(outfilename, "w") as h5out:
     for x in out_trigs:
         xgroup = h5out.create_group(x)
         for col in out_trigs[x]:
+            if "template_id" == col:
+                continue
             xgroup.create_dataset(
                 col,
                 data=out_trigs[x][col],
                 compression="gzip",
                 compression_opts=9,
             )
-    
+    # map and write template ids
+    ids = template_hash_to_id(h5out, args.bank_file)
+    h5out.create_dataset(
+        "network/template_id",
+        data=ids,
+        compression="gzip",
+        compression_opts=9,
+    )
 if args.verbose:
     print("Found/missed written to {}".format(outfilename))

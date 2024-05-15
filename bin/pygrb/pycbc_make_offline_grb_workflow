@@ -273,9 +273,14 @@ all_files.extend(datafind_veto_files)
 # TEMPLATE BANK AND SPLIT BANK
 bank_files = _workflow.setup_tmpltbank_workflow(wflow, sciSegs,
                                                 datafind_files, df_dir)
+# Check there are not multiple banks
+if len(bank_files) > 1:
+    raise NotImplementedError("Multiple banks not supported")
+full_bank_file = bank_files[0]
+# Note: setup_splittable_workflow requires a FileList as input
 splitbank_files = _workflow.setup_splittable_workflow(wflow, bank_files, df_dir,
                                                       tags=["inspiral"])
-all_files.extend(bank_files)
+all_files.append(full_bank_file)
 all_files.extend(splitbank_files)
 
 # INJECTIONS
@@ -408,10 +413,9 @@ post_proc_method = wflow.cp.get_opt_tags("workflow-postproc",
 pp_files = _workflow.FileList([])
 results_files = _workflow.FileList([])
 if post_proc_method == "PYGRB_OFFLINE":
-    # The content and structure of pp_files are described in the definition
-    # of _workflow.setup_pygrb_pp_workflow
-    pp_files = _workflow.setup_pygrb_pp_workflow(wflow, pp_dir, seg_dir,
-                                      sciSegs[ifo][0], inspiral_files,
+    trig_comb_files, clustered_files, inj_find_files, inj_comb_files =\
+        _workflow.setup_pygrb_pp_workflow(wflow, pp_dir, seg_dir,
+                                      sciSegs[ifo][0], full_bank_file, inspiral_files,
                                       injs, inj_insp_files, inj_tags)
     sec_name = 'workflow-pygrb_pp_workflow'
     if not wflow.cp.has_section(sec_name):
@@ -420,8 +424,10 @@ if post_proc_method == "PYGRB_OFFLINE":
     else:
         logging.info('Entering results module')
         results_files = _workflow.setup_pygrb_results_workflow(wflow, pp_dir,
-                                                               pp_files[1],
-                                                               pp_files[-2])
+                                                               clustered_files,
+                                                               inj_comb_files,
+                                                               full_bank_file,
+                                                               seg_dir)
         logging.info('Leaving results module')
 
 all_files.extend(pp_files)
