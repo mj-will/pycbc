@@ -116,6 +116,8 @@ class HFile(h5py.File):
             mask = new_mask
 
         if not mask.size == size:
+            # You get here if you are using a boolean premask which
+            # isn't the same size as the arrays
             raise RuntimeError(f"Using premask of size {mask.size} which "
                                f"does not match the input datasets ({size}).")
 
@@ -641,9 +643,17 @@ class SingleDetTriggers(object):
             self.mask = np.zeros(self.ntriggers, dtype=bool)
             self.mask[logic_mask] = True
         elif hasattr(self.mask, 'dtype') and (self.mask.dtype == 'bool'):
-            orig_indices = np.flatnonzero(self.mask)[logic_mask]
-            self.mask[:] = False
-            self.mask[orig_indices] = True
+            if hasattr(logic_mask, 'dtype') and (logic_mask.dtype == 'bool'):
+                # So both new and old masks are boolean, numpy slice assignment
+                # can be used directly, with no additional memory.
+                self.mask[self.mask] = logic_mask
+            else:
+                # So logic_mask is either an array, or list, of integers.
+                # This case is a little tricksy, so we begin by converting the
+                # list/array to a boolean, and then do what we did above.
+                new_logic_mask = np.zeros(np.sum(self.mask), dtype=bool)
+                new_logic_mask[logic_mask] = True
+                self.mask[self.mask] = new_logic_mask
         else:
             self.mask = list(np.array(self.mask)[logic_mask])
 
@@ -991,21 +1001,29 @@ class ForegroundTriggers(object):
         return_dict = {}
         for ifo in self.ifos:
             try:
-                tid = self.trig_id[ifo]
-                lgc = tid == -1
+                # Make sure we don't change the internal cached trig_id array
+                tid = np.copy(self.trig_id[ifo])
                 # Put in *some* value for the invalid points to avoid failure
-                # Make sure this doesn't change the cached internal array!
-                tid = np.copy(tid)
+                lgc = tid == -1
                 tid[lgc] = 0
-                # If small number of points don't read the full file
-                if len(tid) < 1000:
-                    curr = []
-                    hdf_dataset = self.sngl_files[ifo].group[variable]
-                    for idx in tid:
-                        curr.append(hdf_dataset[idx])
-                    curr = np.array(curr)
-                else:
-                    curr = self.sngl_files[ifo].get_column(variable)[tid]
+                # Get the appropriate variable dataset
+                group = self.sngl_files[ifo].group
+                if not len(group.keys()):
+                    # There are no groups to consider - move on to next IFO
+                    continue
+                dataset = group[variable]
+                # Convert the trigger ids into a boolean aray so that we can
+                # read only the triggers we want directly from the file
+                mask = np.zeros(dataset.size, dtype=bool)
+                mask[tid] = True
+                needed_data = dataset[mask]
+                # Get order and duplicate information back that was lost in
+                # the boolean mask assignment
+                _, order_duplicate_index = np.unique(
+                    tid,
+                    return_inverse=True
+                )
+                curr = needed_data[order_duplicate_index]
             except IndexError:
                 if len(self.trig_id[ifo]) == 0:
                     curr = np.array([])

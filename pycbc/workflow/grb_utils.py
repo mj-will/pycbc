@@ -69,8 +69,7 @@ def _select_grb_pp_class(wflow, curr_exe):
     exe_to_class_map = {
         'pycbc_grb_trig_combiner': PycbcGrbTrigCombinerExecutable,
         'pycbc_grb_trig_cluster': PycbcGrbTrigClusterExecutable,
-        'pycbc_grb_inj_finder': PycbcGrbInjFinderExecutable,
-        'pycbc_grb_inj_combiner': PycbcGrbInjCombinerExecutable
+        'pycbc_grb_inj_finder': PycbcGrbInjFinderExecutable
     }
     if exe_name not in exe_to_class_map:
         raise ValueError(f"No job class exists for executable {curr_exe}")
@@ -140,12 +139,14 @@ def make_gating_node(workflow, datafind_files, outdir=None, tags=None):
     condition_strain_nodes = []
     condition_strain_outs = FileList([])
     for ifo in workflow.ifos:
-        input_files = FileList([datafind_file for datafind_file in \
+        input_files = FileList([datafind_file for datafind_file in
                                 datafind_files if datafind_file.ifo == ifo])
         condition_strain_jobs = condition_strain_class(cp, "condition_strain",
-                ifos=ifo, out_dir=outdir, tags=tags)
+                                                       ifos=ifo,
+                                                       out_dir=outdir,
+                                                       tags=tags)
         condition_strain_node, condition_strain_out = \
-                condition_strain_jobs.create_node(input_files, tags=tags)
+            condition_strain_jobs.create_node(input_files, tags=tags)
         condition_strain_nodes.append(condition_strain_node)
         condition_strain_outs.extend(FileList([condition_strain_out]))
 
@@ -265,10 +266,6 @@ def setup_pygrb_pp_workflow(wf, pp_dir, seg_dir, segment, bank_file,
         Contains triggers after clustering
     inj_find_files : FileList
         FOUNDMISSED FileList covering all injection sets
-    inj_comb_files : FileList
-        FOUNDMISSED-FILTERED FileList covering all injection sets
-        in the same order as inj_find_files
-        These are filtered by inclination
     """
     # Begin setting up trig combiner job(s)
     # Select executable class and initialize
@@ -276,7 +273,7 @@ def setup_pygrb_pp_workflow(wf, pp_dir, seg_dir, segment, bank_file,
     job_instance = exe_class(wf.cp, "trig_combiner")
     # Create node for coherent no injections jobs
     node, trig_files = job_instance.create_node(wf.ifos, seg_dir, segment,
-                                    insp_files, pp_dir, bank_file)
+                                                insp_files, pp_dir, bank_file)
     wf.add_node(node)
 
     # Trig clustering for each trig file
@@ -307,20 +304,7 @@ def setup_pygrb_pp_workflow(wf, pp_dir, seg_dir, segment, bank_file,
         wf.add_node(node)
         inj_find_files.append(inj_find_file)
 
-    # Combine injections
-    exe_class = _select_grb_pp_class(wf, "inj_combiner")
-    job_instance = exe_class(wf.cp, "inj_combiner")
-    inj_comb_files = FileList([])
-    for in_file in inj_find_files:
-        if 'DETECTION' not in in_file.tags:
-            node, inj_comb_file = job_instance.create_node(in_file,
-                                                           pp_dir,
-                                                           in_file.tags,
-                                                           segment)
-            wf.add_node(node)
-            inj_comb_files.append(inj_comb_file)
-
-    return trig_files, clustered_files, inj_find_files, inj_comb_files
+    return trig_files, clustered_files, inj_find_files
 
 
 class PycbcGrbTrigCombinerExecutable(Executable):
@@ -420,26 +404,6 @@ class PycbcGrbInjFinderExecutable(Executable):
         return node, out_file
 
 
-class PycbcGrbInjCombinerExecutable(Executable):
-    """The class responsible for creating jobs ``pycbc_grb_inj_combiner``
-    """
-    current_retention_level = Executable.ALL_TRIGGERS
-
-    def __init__(self, cp, exe_name):
-        super().__init__(cp=cp, name=exe_name)
-
-    def create_node(self, input_file, out_dir, ifo_tag, segment, tags=None):
-        if tags is None:
-            tags = []
-        node = Node(self)
-        node.add_input_opt('--input-files', input_file)
-        out_name = input_file.name.replace('.h5', '-FILTERED.h5')
-        out_file = File(ifo_tag, 'inj_combiner', segment,
-                        os.path.join(out_dir, out_name), tags=tags)
-        node.add_output_opt('--output-file', out_file)
-        return node, out_file
-
-
 def build_veto_filelist(workflow):
     """Construct a FileList instance containing all veto xml files"""
 
@@ -499,20 +463,9 @@ def make_pygrb_plot(workflow, exec_name, out_dir,
     # TODO: check this for pygrb_plot_stats_distribution
     # They originally wanted seg_files
     if exec_name in ['pygrb_plot_injs_results',
-                     'pygrb_plot_snr_timeseries',
-                     'pygrb_plot_stats_distribution']:
+                     'pygrb_plot_snr_timeseries']:
         trig_time = workflow.cp.get('workflow', 'trigger-time')
         node.add_opt('--trigger-time', trig_time)
-    # Other shared tuning values
-    if exec_name not in ['pygrb_plot_skygrid', 'pygrb_plot_coh_ifosnr']:
-        if not (exec_name == 'pygrb_plot_snr_timeseries' and
-                tags[0] != 'reweighted'):
-            for opt in ['chisq-index', 'chisq-nhigh', 'null-snr-threshold',
-                        'snr-threshold', 'newsnr-threshold',
-                        'sngl-snr-threshold', 'null-grad-thresh',
-                        'null-grad-val']:
-                if workflow.cp.has_option('workflow', opt):
-                    node.add_opt('--'+opt, workflow.cp.get('workflow', opt))
     # Pass the injection file as an input File instance
     if inj_file is not None and exec_name not in \
             ['pygrb_plot_skygrid', 'pygrb_plot_stats_distribution']:
@@ -579,7 +532,7 @@ def make_info_table(workflow, out_dir, tags=None):
 
     tags = [] if tags is None else tags
 
-    # Exectuable
+    # Executable
     exec_name = 'pygrb_grb_info_table'
 
     # Initialize job node
@@ -610,7 +563,7 @@ def make_pygrb_injs_tables(workflow, out_dir,  # exclude=None, require=None,
 
     tags = [] if tags is None else tags
 
-    # Exectuable
+    # Executable
     exec_name = 'pygrb_page_tables'
     # Initialize job node
     grb_name = workflow.cp.get('workflow', 'trigger-name')
@@ -656,7 +609,8 @@ def make_pygrb_injs_tables(workflow, out_dir,  # exclude=None, require=None,
         onsource_file = configparser_value_to_file(workflow.cp,
                                                    'workflow', 'onsource-file')
         node.add_input_opt('--onsource-file', onsource_file)
-        # Loudest offsource triggers and onsource trigger html and h5 output
+        # Loudest offsource triggers and onsource trigger html and h5
+        # output files
         for src_type in ['onsource-trig', 'offsource-trigs']:
             src_type_tags = [src_type.upper().replace('-', '_')]
             node.new_output_file_opt(workflow.analysis_time, '.html',
@@ -692,6 +646,15 @@ def setup_pygrb_minifollowups(workflow, followups_file,
         Tags to add to the minifollowups executables
     """
 
+    logging.info('Entering minifollowups module')
+
+    if not workflow.cp.has_section('workflow-minifollowups'):
+        msg = 'There is no [workflow-minifollowups] section in '
+        msg += 'the configuration file'
+        logging.info(msg)
+        logging.info('Leaving minifollowups')
+        return
+
     tags = [] if tags is None else tags
     # _workflow.makedir(dax_output)
     makedir(dax_output)
@@ -699,7 +662,7 @@ def setup_pygrb_minifollowups(workflow, followups_file,
     # Turn the config file into a File instance
     # curr_ifo = single_trig_file.ifo
     # config_path = os.path.abspath(dax_output + '/' + curr_ifo + \
-    config_path = os.path.abspath(dax_output + '/' + \
+    config_path = os.path.abspath(dax_output + '/' +
                                   '_'.join(tags) + '_minifollowup.ini')
     workflow.cp.write(open(config_path, 'w'))
     config_file = resolve_url_to_file(config_path)
@@ -747,6 +710,7 @@ def setup_pygrb_minifollowups(workflow, followups_file,
                                    staging_site=workflow.staging_site,
                                    cache_file=workflow.cache_file)
     job.add_into_workflow(workflow)
+    logging.info('Leaving minifollowups module')
 
 
 def setup_pygrb_results_workflow(workflow, res_dir, trig_files,
@@ -761,7 +725,7 @@ def setup_pygrb_results_workflow(workflow, res_dir, trig_files,
         The core workflow instance we are populating
     res_dir: The post-processing directory where
         results (plots, etc.) will be stored
-    trig_file: The triggers File object
+    trig_files: FileList of trigger files
     inj_files: FileList of injection results
     bank_file: The template bank File object
     tags: {None, optional}
@@ -786,7 +750,7 @@ def setup_pygrb_results_workflow(workflow, res_dir, trig_files,
                      tags=tags)
     node = exe.create_node()
     # Grab and pass all necessary files
-    node.add_input_list_opt('--trig-file', trig_files)
+    node.add_input_list_opt('--trig-files', trig_files)
     if workflow.cp.has_option('workflow', 'veto-files'):
         veto_files = build_veto_filelist(workflow)
         node.add_input_list_opt('--veto-files', veto_files)
@@ -813,7 +777,7 @@ def setup_pygrb_results_workflow(workflow, res_dir, trig_files,
     node.add_opt('--dax-file-directory', '.')
 
     # Turn the config file into a File instance
-    config_path = os.path.abspath(dax_output + '/' + \
+    config_path = os.path.abspath(dax_output + '/' +
                                   '_'.join(tags) + 'webpage.ini')
     workflow.cp.write(open(config_path, 'w'))
     config_file = resolve_url_to_file(config_path)
