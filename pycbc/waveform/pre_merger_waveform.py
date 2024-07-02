@@ -1,3 +1,4 @@
+from functools import cache
 from scipy import signal
 
 import pycbc.fft
@@ -6,21 +7,30 @@ import pycbc.strain
 import pycbc.waveform
 
 
+@cache
+def get_window(window_length):
+    if window_length:
+        return signal.windows.hann(window_length * 2 + 1)[:window_length]
+    else:
+        return None
+
+
 def apply_pre_merger_kernel(
-    tout,
+    f_series,
     whitening_psd,
     window,
     window_length,
-    nefz,
+    nfz,
     nctf,
-    uids,
+    uid,
+    copy_output=False,
 ):
     """Helper function to apply the pre-merger kernel.
     
     Parameters
     ----------
-    tout : pycbc.types.TimeSeries
-        Time series to apply the kernel to.
+    f_series : pycbc.types.FrequencySeries
+        Frequency series to apply the kernel to.
     whitening_psd : pycbc.types.FrequencySeries
         PSD for whitening the data in the frequency-domain.
     window : numpy.ndarray
@@ -28,42 +38,32 @@ def apply_pre_merger_kernel(
     window_length : int
         Pre-computed length of the window in samples.
     nefz : int
-        Number of extra forward zeroes.
+        Number of forward zeroes.
     nctf : int
         Number of samples to zero at the end of the data.
-    uids : tuple
-        Unique UIDs for computing the (i)FFTs. Must be length 2.
+    uid : int
+        UID for computing the iFFTs.
 
     Returns
     -------
     pycbc.types.TimeSeries
         Whitened time series.
     """
-    # Zero initial data
-    tout.data[:nefz] = 0
-    # Apply window
-    tout.data[nefz:nefz+window_length] *= window
-    # Zero data from cutoff
-    tout.data[-nctf:] = 0
-
-    # TD to FD for whitening 
-    fout = pycbc.strain.strain.execute_cached_fft(
-        tout,
-        copy_output=False,
-        uid=uids[0],
-    )
     # Whiten data
-    fout.data[:] = fout.data[:] * (whitening_psd.data[:]).conj()
+    f_series.data[:] = f_series.data[:] * (whitening_psd.data[:]).conj()
 
-    # TD to FD to reapply zeroes
+    # TD to FD to apply zeroes
     tout_ww = pycbc.strain.strain.execute_cached_ifft(
-        fout,
-        copy_output=False,
-        uid=uids[1],
+        f_series,
+        copy_output=copy_output,
+        uid=uid,
     )
     # Zero initial data
-    tout_ww.data[:nefz] = 0
-    # Zero from cutoff
+    tout_ww.data[:nfz] = 0
+    if window is not None:
+        # Apply window
+        tout_ww.data[nfz:nfz+window_length] *= window
+    # Zero data from cutoff
     tout_ww.data[-nctf:] = 0
     return tout_ww
 
@@ -89,9 +89,6 @@ def generate_data_lisa_pre_merger(
         PSDs for data generation.
     sample_rate : float
         Sampling rate in Hz. 
-    extra_forward_zeros : float
-        Time (in seconds) to set to zero at the start of the waveform. If used,
-        the window will be applied starting after the zeroes.
     seed : int
         Random seed used for generating the noise.
     zero_noise : bool
@@ -183,7 +180,7 @@ def pre_process_data_lisa_pre_merger(
     psds_for_whitening,
     window_length,
     cutoff_time,
-    extra_forward_zeroes=0,
+    forward_zeroes=0,
 ):
     """Pre-process the pre-merger data.
 
@@ -199,8 +196,8 @@ def pre_process_data_lisa_pre_merger(
         Length of the hann window use to taper the start of the data.
     cutoff_time : float
         Time (in seconds) from the end of the waveform to cutoff.
-    extra_forward_zeros : float
-        Time (in seconds) to set to zero at the start of the waveform. If used,
+    forward_zeroes : float
+        Number of samples to set to zero at the start of the waveform. If used,
         the window will be applied starting after the zeroes.
 
     Returns
@@ -208,45 +205,44 @@ def pre_process_data_lisa_pre_merger(
     Dict[str: pycbc.types.TimeSeries]
         Dictionary containing the time-domain data for each channel.
     """
-    # Compute the hann window 
-    window = signal.windows.hann(window_length * 2 + 1)[:window_length]
+    window = get_window(window_length)
 
     # Number of samples to zero
-    nefz = int(extra_forward_zeroes * sample_rate)
     nctf = int(cutoff_time * sample_rate)
 
     # Apply pre-merger kernel to both channels
+    # Function needs frequency series
     strain_ww = {}
     strain_ww["LISA_A"] = apply_pre_merger_kernel(
-        data["LISA_A"],
+        data["LISA_A"].to_frequencyseries(),
         whitening_psd=psds_for_whitening["LISA_A"],
         window=window,
         window_length=window_length,
-        nefz=nefz,
+        nfz=forward_zeroes,
         nctf=nctf,
-        uids=(4235, 4236),
+        uid=4235,
+        copy_output=True,
     )
     strain_ww["LISA_E"] = apply_pre_merger_kernel(
-        data["LISA_E"],
+        data["LISA_E"].to_frequencyseries(),
         whitening_psd=psds_for_whitening["LISA_E"],
         window=window,
         window_length=window_length,
-        nefz=nefz,
+        nfz=forward_zeroes,
         nctf=nctf,
-        uids=(42350, 42360),
+        uid=4236,
+        copy_output=True,
     )
     return strain_ww
 
 
-
-_WINDOW = None
 def generate_waveform_lisa_pre_merger(
     waveform_params,
     psds_for_whitening,
     sample_rate,
     window_length,
     cutoff_time,
-    extra_forward_zeroes=0,
+    forward_zeroes=0,
 ):
     """Generate a pre-merger LISA waveform.
 
@@ -266,55 +262,35 @@ def generate_waveform_lisa_pre_merger(
         waveform.
     cutoff_time: float
         Time (in seconds) from the end of the waveform to cutoff.
-    kernel_length : int
-        Unused.
-    extra_forward_zeroes : int
-        Time (in seconds) to set to zero at the start of the waveform. If used,
+    forward_zeroes : int
+        Number of samples to set to zero at the start of the waveform. If used,
         the window will be applied starting after the zeroes.
     """
-    global _WINDOW
-    if _WINDOW is None or len(_WINDOW) != window_length:
-        _WINDOW = signal.windows.hann(window_length * 2 + 1)[:window_length]
-    window = _WINDOW
-    
-    nefz = int(extra_forward_zeroes * sample_rate)
-    nctf = int(cutoff_time * sample_rate)
+    window = get_window(window_length)
+    nctf = int((cutoff_time + waveform_params["cutoff_deltat"]) * sample_rate)
 
-    # FIXME: do we need to generate LISA_T
     outs = pycbc.waveform.get_fd_det_waveform(
-        ifos=['LISA_A','LISA_E','LISA_T'], **waveform_params
-    )
-
-    # FD waveform to TD so we can apply pre-merger kernel
-    tout_A = pycbc.strain.strain.execute_cached_ifft(
-        outs["LISA_A"],
-        copy_output=False,
-        uid=1234,
-    )
-    tout_E = pycbc.strain.strain.execute_cached_ifft(
-        outs["LISA_E"],
-        copy_output=False,
-        uid=12340,
+        ifos=['LISA_A','LISA_E'], **waveform_params
     )
 
     # Apply pre-merger kernel
     tout_A_ww = apply_pre_merger_kernel(
-        tout_A,
+        outs["LISA_A"],
         whitening_psd=psds_for_whitening["LISA_A"],
         window=window,
         window_length=window_length,
-        nefz=nefz,
+        nfz=forward_zeroes,
         nctf=nctf,
-        uids=(1235, 1236),
+        uid=1235,
     )
     tout_E_ww = apply_pre_merger_kernel(
-        tout_E,
+        outs["LISA_E"],
         whitening_psd=psds_for_whitening["LISA_E"],
         window=window,
         window_length=window_length,
-        nefz=nefz,
+        nfz=forward_zeroes,
         nctf=nctf,
-        uids=(12350, 12360),
+        uid=12350,
     )
     
     # Back to FD for search/inference
@@ -322,11 +298,11 @@ def generate_waveform_lisa_pre_merger(
     fouts_ww["LISA_A"] = pycbc.strain.strain.execute_cached_fft(
         tout_A_ww,
         copy_output=False,
-        uid=1237,
+        uid=1236,
     )
     fouts_ww["LISA_E"] = pycbc.strain.strain.execute_cached_fft(
         tout_E_ww,
         copy_output=False,
-        uid=12370,
+        uid=12360,
     )
     return fouts_ww
