@@ -77,6 +77,13 @@ except ImportError:
     pass
 
 
+try:
+    from .pocomc import PocoMCSampler
+    samplers[PocoMCSampler.name] = PocoMCSampler
+except ImportError:
+    pass
+
+
 def load_from_config(cp, model, **kwargs):
     """Loads a sampler from the given config file.
 
