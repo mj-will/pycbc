@@ -175,14 +175,16 @@ class PocoMCPriorWrapper(Prior):
     def __init__(self, model):
         self.model = model
         self._dims = len(model.sampling_params)
-        bounds = []
+        bounds = {}
         for dist in model.prior_distribution.distributions:
-            bounds += [
-                    [v.min, v.max]
+            bounds.update(
+                **{
+                    k: [v.min, v.max]
                     for k, v in dist.bounds.items()
                     if k in self.model.sampling_params
-            ]
-        self._bounds = np.array(bounds)
+                }
+            )
+        self._bounds = np.array([bounds[k] for k in model.sampling_params])
 
     @property
     def bounds(self):
@@ -195,7 +197,7 @@ class PocoMCPriorWrapper(Prior):
     def to_dict(self, x):
         return dict(zip(self.model.sampling_params, x.T))
 
-    def from_dict(self, x):
+    def from_field_array(self, x):
         return np.array([x[k] for k in self.model.sampling_params]).T
 
     def logpdf(self, x):
@@ -207,4 +209,4 @@ class PocoMCPriorWrapper(Prior):
         return logp
 
     def rvs(self, size=1):
-        return self.from_dict(self.model.prior_rvs(size=size))
+        return self.from_field_array(self.model.prior_rvs(size=size))
