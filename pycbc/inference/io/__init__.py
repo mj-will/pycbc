@@ -61,6 +61,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from poppy_pycbc.io import PoppyFile
+    filetypes[PoppyFile.name] = PoppyFile
+except ImportError:
+    pass
+
 
 def get_file_type(filename):
     """ Returns I/O object to use for file.

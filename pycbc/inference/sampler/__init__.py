@@ -76,6 +76,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from poppy_pycbc.sampler import PoppySampler
+    samplers[PoppySampler.name] = PoppySampler
+except ImportError:
+    pass
+
 
 def load_from_config(cp, model, **kwargs):
     """Loads a sampler from the given config file.
