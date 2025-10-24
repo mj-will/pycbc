@@ -62,8 +62,8 @@ except ImportError:
     pass
 
 try:
-    from poppy_pycbc.io import PoppyFile
-    filetypes[PoppyFile.name] = PoppyFile
+    from aspire_pycbc.io import AspireFile
+    filetypes[AspireFile.name] = AspireFile
 except ImportError:
     pass
 
