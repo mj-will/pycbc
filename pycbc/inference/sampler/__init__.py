@@ -77,8 +77,8 @@ except ImportError:
     pass
 
 try:
-    from poppy_pycbc.sampler import PoppySampler
-    samplers[PoppySampler.name] = PoppySampler
+    from aspire_pycbc.sampler import AspireSampler
+    samplers[AspireSampler.name] = AspireSampler
 except ImportError:
     pass
 
